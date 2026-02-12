@@ -1,5 +1,7 @@
 # DevOps Info Service (FastAPI)
 
+[![python-ci](https://github.com/<username>/<repo>/actions/workflows/python-ci.yml/badge.svg)](https://github.com/<username>/<repo>/actions/workflows/python-ci.yml)
+
 ## Overview
 A lightweight web service that reports system and runtime information for the DevOps course labs.
 
@@ -21,6 +23,17 @@ python app.py
 PORT=8080 python app.py
 ```
 
+## Testing
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+pytest
+```
+
+## Linting
+```bash
+ruff check .
+```
+
 ## API Endpoints
 - `GET /` - Service and system information
 - `GET /health` - Health check
@@ -36,18 +49,18 @@ PORT=8080 python app.py
 
 ### Building the Image
 ```bash
-docker build -t <username>/devops-info-service:latest .
+docker build -t chupapupa/devops-info-service:latest .
 ```
 
 ### Running the Container
 ```bash
-docker run -p 5000:5000 <username>/devops-info-service:latest
+docker run -p 5000:5000 chupapupa/devops-info-service:latest
 # With custom port
-docker run -p 8080:5000 -e PORT=5000 <username>/devops-info-service:latest
+docker run -p 8080:5000 -e PORT=5000 chupapupa/devops-info-service:latest
 ```
 
 ### Pulling from Docker Hub
 ```bash
-docker pull <username>/devops-info-service:latest
-docker run -p 5000:5000 <username>/devops-info-service:latest
+docker pull chupapupa/devops-info-service:latest
+docker run -p 5000:5000 chupapupa/devops-info-service:latest
 ```
