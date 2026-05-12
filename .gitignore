@@ -1,2 +1,19 @@
 test
 /venv
+*.tfstate
+*.tfstate.*
+.terraform/
+terraform.tfvars
+*.tfvars
+sa-key.json
+*.pem
+*.key
+inno-key.json
+.terraform.lock.hcl
+
+# Ansible
+*.retry
+.vault_pass
+ansible/inventory/*.pyc
+__pycache__/
+venv
