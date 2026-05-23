@@ -1,0 +1,129 @@
+# Default values for devops-python chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 3
+
+workload:
+  # statefulset | rollout
+  kind: statefulset
+
+image:
+  repository: devops-python
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: NodePort
+  port: 80
+  targetPort: 5000
+  nodePort: 30080
+
+resources:
+  limits:
+    cpu: 250m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Liveness and readiness probe configuration
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 5000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 5000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 2
+  failureThreshold: 3
+
+# Argo Rollouts strategy (Lab 14): canary | blueGreen
+rollout:
+  strategy: canary
+  revisionHistoryLimit: 3
+  blueGreen:
+    autoPromotionEnabled: false
+    autoPromotionSeconds: null
+    scaleDownDelaySeconds: 30
+    previewService:
+      enabled: true
+      nodePort: null
+  canary:
+    maxSurge: 1
+    maxUnavailable: 0
+    steps:
+      - setWeight: 20
+      - pause: {}
+      - setWeight: 40
+      - pause:
+          duration: 30s
+      - setWeight: 60
+      - pause:
+          duration: 30s
+      - setWeight: 80
+      - pause:
+          duration: 30s
+      - setWeight: 100
+
+# Helm lifecycle hooks
+hooks:
+  preInstall:
+    enabled: true
+  postInstall:
+    enabled: true
+
+# Application configuration
+app:
+  name: devops-info-service
+  environment: dev
+  features:
+    visitsCounter: true
+    metrics: true
+    logging: true
+  env:
+    APP_ENV: dev
+    LOG_LEVEL: info
+    FEATURE_VISITS_COUNTER: "true"
+    FEATURE_METRICS: "true"
+
+# ConfigMap and persistence settings
+config:
+  enabled: true
+  fileMountPath: /config/config.json
+
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  size: 100Mi
+  storageClass: ""
+  mountPath: /data
+  visitsFile: /data/visits
+
+# Application secrets configuration
+secrets:
+  enabled: true
+  # Use placeholder values - override with --set during install
+  data:
+    DATABASE_USER: "admin"
+    DATABASE_PASSWORD: "changeme"
+    API_KEY: "placeholder-api-key"
+
+# Name overrides
+nameOverride: ""
+fullnameOverride: ""
+
+# Labels
+labels:
+  app: devops-python
+  version: "1.0"
