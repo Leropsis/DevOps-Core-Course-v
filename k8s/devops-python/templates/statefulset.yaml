@@ -1,0 +1,156 @@
+{{- if eq (default "statefulset" .Values.workload.kind) "statefulset" }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "devops-python.fullname" . }}
+  labels:
+    {{- include "devops-python.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "devops-python.fullname" . }}-headless
+  replicas: {{ .Values.replicaCount }}
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "devops-python.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "devops-python.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      {{- if .Values.initContainers.enabled }}
+      initContainers:
+        {{- if .Values.initContainers.download.enabled }}
+        - name: init-download
+          image: {{ .Values.initContainers.download.image }}
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "=== Init Container: Creating test file ==="
+              echo "Pod hostname: $(hostname)"
+              echo "Init container timestamp: $(date)"
+              cat > /work-dir/initialized.txt << 'EOF'
+              Pod {{ .Release.Name }} initialized at $(date)
+              This file was created by init-download container
+              Main application can read this file in /data-init/
+              EOF
+              echo "Created by init-download on $(date)" >> /work-dir/initialized.txt
+              ls -la /work-dir/
+              cat /work-dir/initialized.txt
+          volumeMounts:
+            - name: workdir
+              mountPath: /work-dir
+        {{- end }}
+        {{- if .Values.initContainers.waitForService.enabled }}
+        - name: wait-for-service
+          image: {{ .Values.initContainers.waitForService.image }}
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for service {{ .Values.initContainers.waitForService.serviceName }}..."
+              timeout {{ .Values.initContainers.waitForService.timeout }} sh -c "until nslookup {{ .Values.initContainers.waitForService.serviceName }}; do sleep 2; done" || echo "Service check timeout"
+              echo "Service is ready!"
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            runAsUser: 1000
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.targetPort }}
+              name: http
+          env:
+            - name: VISITS_FILE
+              value: {{ .Values.persistence.visitsFile | quote }}
+            - name: CONFIG_FILE
+              value: {{ .Values.config.fileMountPath | quote }}
+          {{- if or .Values.config.enabled .Values.secrets.enabled }}
+          envFrom:
+            {{- if .Values.config.enabled }}
+            - configMapRef:
+                name: {{ include "devops-python.fullname" . }}-env
+            {{- end }}
+            {{- if .Values.secrets.enabled }}
+            - secretRef:
+                name: {{ include "devops-python.fullname" . }}-secret
+            {{- end }}
+          {{- end }}
+          resources:
+            requests:
+              memory: {{ .Values.resources.requests.memory | quote }}
+              cpu: {{ .Values.resources.requests.cpu | quote }}
+            limits:
+              memory: {{ .Values.resources.limits.memory | quote }}
+              cpu: {{ .Values.resources.limits.cpu | quote }}
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.httpGet.path }}
+              port: {{ .Values.livenessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.httpGet.path }}
+              port: {{ .Values.readinessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          {{- end }}
+          volumeMounts:
+            {{- if .Values.config.enabled }}
+            - name: config-volume
+              mountPath: {{ .Values.config.fileMountPath | quote }}
+              subPath: config.json
+              readOnly: true
+            {{- end }}
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath | quote }}
+            {{- end }}
+            {{- if .Values.initContainers.enabled }}
+            - name: workdir
+              mountPath: /data-init
+            {{- end }}
+      {{- if .Values.config.enabled }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ include "devops-python.fullname" . }}-config
+            items:
+              - key: config.json
+                path: config.json
+        {{- if .Values.initContainers.enabled }}
+        - name: workdir
+          emptyDir: {}
+        {{- end }}
+      {{- else if .Values.initContainers.enabled }}
+      volumes:
+        - name: workdir
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - {{ .Values.persistence.accessMode | default "ReadWriteOnce" }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+        {{- if .Values.persistence.storageClass }}
+        storageClassName: {{ .Values.persistence.storageClass | quote }}
+        {{- end }}
+  {{- end }}
+{{- end }}
